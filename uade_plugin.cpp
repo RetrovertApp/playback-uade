@@ -461,31 +461,57 @@ static void uade_plugin_static_init(const RVService* service_api) {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-static uint32_t uade_plugin_get_scope_data(void* user_data, int channel, float* buffer, uint32_t num_samples) {
-    UadeReplayerData* data = (UadeReplayerData*)user_data;
-    if (data == nullptr || data->state == nullptr || buffer == nullptr) {
-        return 0;
+static bool uade_plugin_get_structure(void* user_data, RVVizInfo* out) {
+    (void)user_data;
+    if (out == nullptr) {
+        return false;
     }
-
-    if (!data->scope_enabled) {
-        audio_scope_enable(1);
-        data->scope_enabled = true;
-    }
-
-    return audio_scope_get_data(channel, buffer, num_samples);
+    out->caps = RVVizCaps_Scope;
+    out->scroll_mode = RVScrollMode_Synchronized;
+    out->pattern_channel_count = 0;
+    out->scope_channel_count = 4; // Amiga Paula channels
+    out->column_count = 0;
+    return true;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-static uint32_t uade_plugin_get_scope_channel_names(void* user_data, const char** names, uint32_t max_channels) {
+static uint32_t uade_plugin_get_scope_channels(void* user_data, RVChannelDesc* out, uint32_t cap) {
     (void)user_data;
+    if (out == nullptr) {
+        return 0;
+    }
     static const char* s_names[] = { "Paula 0", "Paula 1", "Paula 2", "Paula 3" };
     uint32_t count = 4;
-    if (count > max_channels)
-        count = max_channels;
-    for (uint32_t i = 0; i < count; i++)
-        names[i] = s_names[i];
+    if (count > cap)
+        count = cap;
+    for (uint32_t i = 0; i < count; i++) {
+        memset(out[i].name, 0, sizeof(out[i].name));
+        snprintf((char*)out[i].name, sizeof(out[i].name), "%s", s_names[i]);
+        out[i].scope_width = 0;
+    }
     return count;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+static void uade_plugin_set_scope_enabled(void* user_data, bool on) {
+    UadeReplayerData* data = (UadeReplayerData*)user_data;
+    if (data == nullptr) {
+        return;
+    }
+    audio_scope_enable(on ? 1 : 0);
+    data->scope_enabled = on;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+static uint32_t uade_plugin_get_scope_samples(void* user_data, int32_t channel, float* out, uint32_t cap) {
+    UadeReplayerData* data = (UadeReplayerData*)user_data;
+    if (data == nullptr || data->state == nullptr || out == nullptr || !data->scope_enabled) {
+        return 0;
+    }
+    return audio_scope_get_data(channel, out, cap);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -507,12 +533,19 @@ static RVPlaybackPlugin g_uade_plugin = {
     uade_plugin_metadata,
     uade_plugin_static_init,
     nullptr, // settings_updated
-    nullptr, // get_tracker_info
-    nullptr, // get_pattern_cell
-    nullptr, // get_pattern_num_rows
-    uade_plugin_get_scope_data,
     nullptr, // static_destroy
-    uade_plugin_get_scope_channel_names,
+
+    // Visualization: scope-only (Amiga Paula channels, no pattern grid).
+    uade_plugin_get_structure,
+    nullptr, // get_columns
+    nullptr, // get_pattern_channels
+    uade_plugin_get_scope_channels,
+    nullptr, // get_position
+    nullptr, // get_channel_rows
+    nullptr, // get_cells
+    uade_plugin_set_scope_enabled,
+    uade_plugin_get_scope_samples,
+    nullptr, // get_vu
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
