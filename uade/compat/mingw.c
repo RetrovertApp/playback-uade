@@ -23,7 +23,7 @@ void uade_arch_kill_and_wait_uadecore(struct uade_ipc *ipc, pid_t *uadepid)
 int uade_arch_spawn(struct uade_ipc *ipc, pid_t *uadepid, const char *uadename, const int */*keep_fds*/)
 {
     WSADATA wsaData;
-    SOCKET sockets[2];
+    int sockets[2];
     char cmdline[PATH_MAX];
 
     if (WSAStartup(MAKEWORD(2,2), &wsaData)) {

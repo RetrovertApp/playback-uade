@@ -12,34 +12,40 @@
 #define pid_t int
 #endif
 
-#define uade_debug(state, fmt, args...)                  \
+#define uade_debug(state, ...)                           \
     do {                                                 \
         if ((state) == NULL || uade_is_verbose(state)) { \
-            fprintf(stderr, fmt, ##args);                \
+            fprintf(stderr, __VA_ARGS__);                \
         }                                                \
     } while (0)
-#define uade_die(fmt, args...)                 \
-    do {                                       \
-        fprintf(stderr, "uade: " fmt, ##args); \
-        exit(1);                               \
-    } while (0)
-#define uade_die_error(fmt, args...)                                     \
-    do {                                                                 \
-        fprintf(stderr, "uade: " fmt ": %s\n", ##args, strerror(errno)); \
-        exit(1);                                                         \
-    } while (0)
-#define uade_error(fmt, args...)                                                  \
-    do {                                                                          \
-        fprintf(stderr, "%s:%d: %s: " fmt, __FILE__, __LINE__, __func__, ##args); \
-        abort();                                                                  \
-    } while (0)
-#define uade_info(fmt, args...)                     \
-    do {                                            \
-        fprintf(stderr, "uade info: " fmt, ##args); \
-    } while (0)
-#define uade_warning(fmt, args...)                     \
+#define uade_die(...)                                  \
     do {                                               \
-        fprintf(stderr, "uade warning: " fmt, ##args); \
+        fprintf(stderr, "uade: ");                     \
+        fprintf(stderr, __VA_ARGS__);                  \
+        exit(1);                                       \
+    } while (0)
+#define uade_die_error(...)                             \
+    do {                                                \
+        fprintf(stderr, "uade: ");                      \
+        fprintf(stderr, __VA_ARGS__);                   \
+        fprintf(stderr, ": %s\n", strerror(errno));     \
+        exit(1);                                        \
+    } while (0)
+#define uade_error(...)                                                        \
+    do {                                                                       \
+        fprintf(stderr, "%s:%d: %s: ", __FILE__, __LINE__, __func__);          \
+        fprintf(stderr, __VA_ARGS__);                                           \
+        abort();                                                               \
+    } while (0)
+#define uade_info(...)                               \
+    do {                                             \
+        fprintf(stderr, "uade info: ");              \
+        fprintf(stderr, __VA_ARGS__);                \
+    } while (0)
+#define uade_warning(...)                              \
+    do {                                               \
+        fprintf(stderr, "uade warning: ");             \
+        fprintf(stderr, __VA_ARGS__);                  \
     } while (0)
 
 char* uade_dirname(char* dst, char* src, size_t maxlen);

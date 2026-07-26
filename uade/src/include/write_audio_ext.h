@@ -18,13 +18,19 @@ enum UADEPaulaEventType {
 	PET_MAX_ENUM,  /* This value may change */
 };
 
-struct uade_paula_event_frame {
+#ifdef _MSC_VER
+#define UADE_AUDIO_PACK(declaration) __pragma(pack(push, 1)) declaration __pragma(pack(pop))
+#else
+#define UADE_AUDIO_PACK(declaration) declaration __attribute__((packed))
+#endif
+
+UADE_AUDIO_PACK(struct uade_paula_event_frame {
 	int8_t channel;
 	int8_t event_type;
 	uint16_t event_value;  /* bigendian */
-} __attribute__((packed));
+});
 
-struct uade_write_audio_frame {
+UADE_AUDIO_PACK(struct uade_write_audio_frame {
 	/*
 	 * bigendian: 0xCCTTTTTT. If 0xCC == 0, data.output[i] contains audio
 	 * data for channel i. Otherwise, data.uade_paula_event_frame contains
@@ -35,6 +41,6 @@ struct uade_write_audio_frame {
 		int16_t output[4];  /* bigendian */
 		struct uade_paula_event_frame paula_event_frame;
 	} data;
-} __attribute__((packed));
+});
 
 #endif

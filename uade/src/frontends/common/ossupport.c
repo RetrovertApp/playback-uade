@@ -16,12 +16,12 @@
 #include <fcntl.h>
 #include <limits.h>
 #include <signal.h>
+#include <setjmp.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <pthread.h>
 
 #ifdef _WIN32
 #include "uade/dirent_win32.h"
@@ -238,6 +238,14 @@ void uade_arch_kill_and_wait_uadecore(struct uade_ipc* ipc, pid_t* uadepid, void
     uade_wait_thread(user_data);
 }
 
+static
+#ifdef _WIN32
+__declspec(thread)
+#else
+_Thread_local
+#endif
+jmp_buf uade_thread_exit_context;
+
 static void thread_func(void* data) {
     int* fds = (int*)data;
     char input[32], output[32];
@@ -247,7 +255,8 @@ static void thread_func(void* data) {
     snprintf(output, sizeof output, "%d", fds[1]);
 
     char* args[] = { "uadecore", "-i", input, "-o", output };
-    uadecore_main(5, args);
+    if (setjmp(uade_thread_exit_context) == 0)
+        uadecore_main(5, args);
 }
 
 static int spawn_fds[2];
@@ -284,10 +293,9 @@ char* canonicalize_file_name(const char* path) {
 }
 
 /*
- * Thread-safe exit function for use when UADE runs as a thread instead of a process.
- * This function is used via -Dexit=uade_thread_exit to replace exit() calls in uadecore.
+ * Return to the embedded core thread entry point instead of terminating the host.
+ * This function is used via -Dexit=uade_thread_exit in uadecore only.
  */
 void uade_thread_exit(int status) {
-    (void)status;
-    pthread_exit(NULL);
+    longjmp(uade_thread_exit_context, status == 0 ? 1 : status);
 }

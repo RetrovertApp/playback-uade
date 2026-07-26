@@ -51,28 +51,34 @@ enum uade_msgtype {
 	UADE_MSG_LAST
 };
 
-struct uade_msg {
+#ifdef _MSC_VER
+#define UADE_PACK(declaration) __pragma(pack(push, 1)) declaration __pragma(pack(pop))
+#else
+#define UADE_PACK(declaration) declaration __attribute__((packed))
+#endif
+
+UADE_PACK(struct uade_msg {
 	uint32_t msgtype;
 	uint32_t size;
 	uint8_t data[0];
-} __attribute__((packed));
+});
 
 /*
  * uade_msg_file is a valid uade_msg struct. It is followed by file data in
  * separate messages.
  */
-struct uade_msg_file {
+UADE_PACK(struct uade_msg_file {
 	uint32_t msgtype;
 	uint32_t size;
 	uint32_t filesize; /* network byte order */
 	uint8_t filename[UADE_MAX_NAME_SIZE];
-} __attribute__((packed));
+});
 
-struct uade_msg_file_data {
+UADE_PACK(struct uade_msg_file_data {
 	uint32_t msgtype;
 	uint32_t size;
 	uint8_t data[4096];
-} __attribute__((packed));
+});
 
 enum uade_control_state {
 	UADE_INITIAL_STATE = 0,

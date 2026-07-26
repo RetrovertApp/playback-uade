@@ -14,7 +14,7 @@
 #include <limits.h>
 #ifdef _WIN32
 #include <uade/dirent_win32.h>
-#include <Winsock2.h>
+#include <winsock2.h>
 #else
 #include <dirent.h>
 #include <arpa/inet.h>
@@ -924,7 +924,7 @@ void uadecore_option(int argc, char **argv)
 	  exit(1);
   }
 
-#if defined(__MINGW32__)
+#if defined(__MINGW32__) && !defined(UADE_EMBEDDED_CORE)
 // convert socket handles to proper fds
   int _in_fd = _open_osfhandle(in_fd, O_RDWR|O_BINARY);
   if (_in_fd < 0) {

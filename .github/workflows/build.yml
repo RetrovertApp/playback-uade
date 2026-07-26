@@ -10,14 +10,24 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
+            compiler: default
             cmake_flags: ""
           - os: windows-latest
-            cmake_flags: ""
+            compiler: clang
+            cmake_flags: "-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++"
+          - os: windows-latest
+            compiler: msvc
+            cmake_flags: "-DUADE_BUILD_SMOKE_TEST=ON"
           - os: macos-latest
+            compiler: default
             cmake_flags: ""
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Configure MSVC environment
+        if: matrix.compiler == 'msvc'
+        uses: ilammy/msvc-dev-cmd@v1
 
       - name: Install Ninja
         uses: seanmiddleditch/gha-setup-ninja@v5
@@ -28,9 +38,13 @@ jobs:
       - name: Build
         run: cmake --build build
 
+      - name: Run UADE playback smoke test
+        if: matrix.compiler == 'msvc'
+        run: ctest --test-dir build --output-on-failure
+
       - name: Upload artifact
         if: startsWith(github.ref, 'refs/tags/')
         uses: actions/upload-artifact@v4
         with:
-          name: plugin-${{ matrix.os }}
+          name: plugin-${{ matrix.os }}-${{ matrix.compiler }}
           path: build/plugins/*

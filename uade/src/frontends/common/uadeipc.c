@@ -24,7 +24,7 @@
 
 #ifdef _WIN32
 #include <uade/dirent_win32.h>
-#include <Winsock2.h>
+#include <winsock2.h>
 #endif
 
 static int valid_message(struct uade_msg *uc);

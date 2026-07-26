@@ -7,7 +7,7 @@
 #include <stdio.h>
 
 #ifdef _WIN32
-#include <Winsock2.h>
+#include <winsock2.h>
 #define UREAD(fd, target, len) recv(fd, target, len, 0)
 #define UWRITE(fd, target, len) send(fd, target, len, 0)
 #define UCLOSE(fd) closesocket(fd)

@@ -26,6 +26,13 @@ unsigned int audio_scope_get_data(int channel, float* buffer, unsigned int num_s
 #include <string.h>
 #include <thread>
 
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#else
+#include <dlfcn.h>
+#endif
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #define OUTPUT_SAMPLE_RATE 48000
@@ -445,16 +452,33 @@ static void uade_plugin_static_init(const RVService* service_api) {
     rv_init_log_api(service_api);
     rv_init_metadata_api(service_api);
 
-    // Set base directory for UADE data files
-    // The plugin expects the uade data directory to be alongside the plugin
-    // Default to ~/.replay2/system/cores/music_player/playback_plugins/uade_data
-    const char* home = getenv("HOME");
-    if (home) {
-        snprintf(g_uade_base_dir, sizeof(g_uade_base_dir),
-                 "%s/.replay2/system/cores/music_player/playback_plugins/uade_data", home);
-    } else {
-        strncpy(g_uade_base_dir, "uade_data", sizeof(g_uade_base_dir) - 1);
+    // Locate the data installed alongside the plugin.
+#ifdef _WIN32
+    HMODULE module = nullptr;
+    if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           reinterpret_cast<LPCSTR>(&uade_plugin_static_init), &module)) {
+        DWORD length = GetModuleFileNameA(module, g_uade_base_dir, sizeof(g_uade_base_dir));
+        if (length > 0 && length < sizeof(g_uade_base_dir)) {
+            char* separator = strrchr(g_uade_base_dir, '\\');
+            if (!separator)
+                separator = strrchr(g_uade_base_dir, '/');
+            if (separator)
+                snprintf(separator, sizeof(g_uade_base_dir) - (separator - g_uade_base_dir), "\\uade_data");
+        }
     }
+#else
+    Dl_info module_info = {};
+    if (dladdr(reinterpret_cast<void*>(&uade_plugin_static_init), &module_info) &&
+        module_info.dli_fname) {
+        strncpy(g_uade_base_dir, module_info.dli_fname, sizeof(g_uade_base_dir) - 1);
+        char* separator = strrchr(g_uade_base_dir, '/');
+        if (separator)
+            snprintf(separator, sizeof(g_uade_base_dir) - (separator - g_uade_base_dir), "/uade_data");
+    }
+#endif
+
+    if (g_uade_base_dir[0] == '\0')
+        strncpy(g_uade_base_dir, "uade_data", sizeof(g_uade_base_dir) - 1);
 
     rv_info("UADE: Initialized with base directory: %s", g_uade_base_dir);
 }

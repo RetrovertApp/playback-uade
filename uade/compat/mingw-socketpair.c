@@ -51,6 +51,7 @@ WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH 
 
 #include <string.h>
 #include <stdio.h>
+#include <limits.h>
 
 # include <ws2tcpip.h>  /* socklen_t, et al (MSVC20xx) */
 # include <windows.h>
@@ -75,7 +76,27 @@ struct sockaddr_un {
  *   sockets must be closed with closesocket() regardless.
  */
 
-int dumb_socketpair(SOCKET socks[2], int make_overlapped)
+static INIT_ONCE winsock_init_once = INIT_ONCE_STATIC_INIT;
+
+static BOOL CALLBACK init_winsock(PINIT_ONCE init_once, PVOID parameter,
+                                  PVOID *context)
+{
+    WSADATA wsa_data;
+    int result;
+
+    (void)init_once;
+    (void)parameter;
+    (void)context;
+
+    result = WSAStartup(MAKEWORD(2, 2), &wsa_data);
+    if (result != NO_ERROR) {
+        WSASetLastError(result);
+        return FALSE;
+    }
+    return TRUE;
+}
+
+int dumb_socketpair(int output_socks[2], int make_overlapped)
 {
     union {
         struct sockaddr_un unaddr;
@@ -83,17 +104,21 @@ int dumb_socketpair(SOCKET socks[2], int make_overlapped)
         struct sockaddr addr;
     } a;
     SOCKET listener;
+    SOCKET socks[2] = {INVALID_SOCKET, INVALID_SOCKET};
     int e, ii;
     int domain = AF_UNIX;
     socklen_t addrlen = sizeof(a.unaddr);
     DWORD flags = (make_overlapped ? WSA_FLAG_OVERLAPPED : 0);
     int reuse = 1;
 
-    if (socks == 0) {
+    if (output_socks == 0) {
         WSASetLastError(WSAEINVAL);
         return SOCKET_ERROR;
     }
-    socks[0] = socks[1] = -1;
+    output_socks[0] = output_socks[1] = -1;
+
+    if (!InitOnceExecuteOnce(&winsock_init_once, init_winsock, NULL, NULL))
+        return SOCKET_ERROR;
 
     /* AF_UNIX/SOCK_STREAM became available in Windows 10
      * ( https://devblogs.microsoft.com/commandline/af_unix-comes-to-windows )
@@ -197,7 +222,14 @@ int dumb_socketpair(SOCKET socks[2], int make_overlapped)
         if (socks[1] == INVALID_SOCKET)
             goto fallback;
 
+        if ((uintptr_t)socks[0] > INT_MAX || (uintptr_t)socks[1] > INT_MAX) {
+            WSASetLastError(WSAEMFILE);
+            goto fallback;
+        }
+
         closesocket(listener);
+        output_socks[0] = (int)socks[0];
+        output_socks[1] = (int)socks[1];
         return 0;
 
     fallback:
@@ -208,9 +240,10 @@ int dumb_socketpair(SOCKET socks[2], int make_overlapped)
         closesocket(listener);
         closesocket(socks[0]);
         closesocket(socks[1]);
+        socks[0] = socks[1] = INVALID_SOCKET;
         WSASetLastError(e);
     }
 
-    socks[0] = socks[1] = -1;
+    output_socks[0] = output_socks[1] = -1;
     return SOCKET_ERROR;
 }

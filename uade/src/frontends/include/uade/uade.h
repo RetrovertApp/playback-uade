@@ -32,7 +32,7 @@ extern "C" {
 #include <stdint.h>
 #include <stdio.h>
 #ifdef _WIN32
-#include <BaseTsd.h>
+#include <basetsd.h>
 typedef SSIZE_T ssize_t;
 #ifndef PATH_MAX
 #define PATH_MAX 260

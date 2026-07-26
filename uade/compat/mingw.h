@@ -8,6 +8,6 @@
 #define random rand
 #define srandom srand
 
-int dumb_socketpair(SOCKET socks[2], int make_overlapped);
+int dumb_socketpair(int socks[2], int make_overlapped);
 
 #endif

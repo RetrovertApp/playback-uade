@@ -12,6 +12,9 @@
 cmake_minimum_required(VERSION 3.16)
 project(playback_uade C CXX)
 
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(PlaybackPlugin)
 
@@ -25,12 +28,6 @@ set(BENCODE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/bencode")
 
 if(NOT EXISTS "${UADE_SRC}/uade.c")
     message(WARNING "UADE source not found at ${UADE_SRC}. UADE plugin will not be built.")
-    return()
-endif()
-
-# UADE relies on POSIX APIs (pthreads, socketpairs) and cannot build on Windows
-if(WIN32)
-    message(STATUS "UADE plugin skipped on Windows (requires POSIX APIs)")
     return()
 endif()
 
@@ -78,6 +75,17 @@ target_include_directories(bencode PUBLIC
 )
 set_target_properties(bencode PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
+function(uade_enable_msvc_c target_name)
+    if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
+        # UADE uses C11 designated initializers. __STDC__ is also required by
+        # its inherited UAE compatibility headers, but MSVC only defines it
+        # when explicitly requested.
+        target_compile_options(${target_name} PRIVATE /std:c11 /Zc:__STDC__)
+    endif()
+endfunction()
+
+uade_enable_msvc_c(bencode)
+
 # =============================================================================
 # Step 3: Build libuade (frontend common modules)
 # =============================================================================
@@ -123,9 +131,12 @@ target_include_directories(libuade PUBLIC
     ${BENCODE_ROOT}/include
 )
 target_compile_definitions(libuade PRIVATE ${UADE_COMPILE_DEFS})
+uade_enable_msvc_c(libuade)
 suppress_external_warnings(libuade)
 # Clang 16+ makes implicit-function-declaration a hard error that -w doesn't suppress
-target_compile_options(libuade PRIVATE -Wno-error=implicit-function-declaration)
+if(NOT MSVC)
+    target_compile_options(libuade PRIVATE -Wno-error=implicit-function-declaration)
+endif()
 set_target_properties(libuade PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_link_libraries(libuade PRIVATE bencode)
 
@@ -139,6 +150,7 @@ set(CPUEMU_PARTS 1 2 3 4 5 6 7 8)
 foreach(PART ${CPUEMU_PARTS})
     add_library(cpuemu${PART} OBJECT ${UADE_GENERATED_DIR}/cpuemu.c)
     target_compile_definitions(cpuemu${PART} PRIVATE PART_${PART} ${UADE_COMPILE_DEFS})
+    uade_enable_msvc_c(cpuemu${PART})
     target_include_directories(cpuemu${PART} PRIVATE
         ${UADE_SRC}
         ${UADE_SRC}/include
@@ -146,7 +158,9 @@ foreach(PART ${CPUEMU_PARTS})
         ${UADE_GENERATED_DIR}
     )
     suppress_external_warnings(cpuemu${PART})
-    target_compile_options(cpuemu${PART} PRIVATE -Wno-error=implicit-function-declaration)
+    if(NOT MSVC)
+        target_compile_options(cpuemu${PART} PRIVATE -Wno-error=implicit-function-declaration)
+    endif()
     set_target_properties(cpuemu${PART} PROPERTIES POSITION_INDEPENDENT_CODE ON)
 endforeach()
 
@@ -197,12 +211,16 @@ target_include_directories(uadecore PUBLIC
 )
 target_compile_definitions(uadecore PRIVATE
     DISABLE_ZAKALWE=1
+    UADE_EMBEDDED_CORE=1
     ${UADE_COMPILE_DEFS}
-    # Replace exit() with pthread_exit() so uadecore doesn't kill the whole process
+    # Return control to the embedded core thread instead of terminating the host process.
     exit=uade_thread_exit
 )
+uade_enable_msvc_c(uadecore)
 suppress_external_warnings(uadecore)
-target_compile_options(uadecore PRIVATE -Wno-error=implicit-function-declaration -fPIC)
+if(NOT MSVC)
+    target_compile_options(uadecore PRIVATE -Wno-error=implicit-function-declaration)
+endif()
 set_target_properties(uadecore PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 # =============================================================================
@@ -220,10 +238,6 @@ target_include_directories(uade_playback PRIVATE
     ${UADE_SRC}/include
 )
 
-target_compile_definitions(uade_playback PRIVATE
-    RV_EXPORT=__attribute__\(\(visibility\(\"default\"\)\)\)
-)
-
 if(NOT MSVC)
     target_compile_options(uade_playback PRIVATE
         -Wno-unused-parameter
@@ -237,9 +251,11 @@ target_link_libraries(uade_playback PRIVATE
     bencode
 )
 
-# Link pthread on Unix
+# std::thread uses the platform's native threading implementation.
+find_package(Threads REQUIRED)
+target_link_libraries(uade_playback PRIVATE Threads::Threads)
 if(UNIX)
-    target_link_libraries(uade_playback PRIVATE pthread m)
+    target_link_libraries(uade_playback PRIVATE m)
 endif()
 
 # Link winsock on Windows
@@ -256,8 +272,7 @@ set_target_properties(uade_playback PROPERTIES
 # Step 6: Install UADE data files (players, eagleplayer.conf)
 # =============================================================================
 
-set(USER_CORES_DIR "$ENV{HOME}/.replay2/system/cores")
-set(UADE_DATA_DIR "${USER_CORES_DIR}/music_player/playback_plugins/uade_data")
+set(UADE_DATA_DIR "${RETROVERT_PLUGIN_OUTPUT_DIR}/uade_data")
 
 # Install UADE data files
 add_custom_command(TARGET uade_playback POST_BUILD
@@ -278,3 +293,25 @@ add_custom_command(TARGET uade_playback POST_BUILD
 )
 
 rv_set_plugin_properties(uade_playback)
+
+option(UADE_BUILD_SMOKE_TEST "Build the standalone UADE playback smoke test" OFF)
+if(UADE_BUILD_SMOKE_TEST)
+    enable_testing()
+    add_executable(uade_playback_smoke tests/uade_playback_smoke.cpp)
+    target_include_directories(uade_playback_smoke PRIVATE ${RETROVERT_INCLUDE_DIR})
+    set_target_properties(uade_playback_smoke PROPERTIES
+        CXX_STANDARD 11
+        CXX_STANDARD_REQUIRED ON
+        RUNTIME_OUTPUT_DIRECTORY "${RETROVERT_PLUGIN_OUTPUT_DIR}"
+    )
+    if(UNIX)
+        target_link_libraries(uade_playback_smoke PRIVATE ${CMAKE_DL_LIBS})
+    endif()
+    add_test(
+        NAME uade_playback_smoke
+        COMMAND uade_playback_smoke "$<TARGET_FILE:uade_playback>"
+    )
+    set_tests_properties(uade_playback_smoke PROPERTIES
+        WORKING_DIRECTORY "${RETROVERT_PLUGIN_OUTPUT_DIR}"
+    )
+endif()
