@@ -48,10 +48,22 @@ if(WIN32)
         SIZEOF___INT64=8
     )
     if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
-        # The UCRT exposes the POSIX spelling as _strdup. Without this mapping,
-        # MSVC accepts strdup as an implicitly declared int-returning function
-        # and truncates the allocated pointer on 64-bit builds.
-        list(APPEND UADE_COMPILE_DEFS strdup=_strdup)
+        # MSVC's UCRT prefixes these POSIX-compatible entry points. Without
+        # explicit aliases, legacy C accepts them as implicitly declared
+        # int-returning functions, which also truncates pointer returns.
+        list(APPEND UADE_COMPILE_DEFS
+            access=_access
+            close=_close
+            fdopen=_fdopen
+            fileno=_fileno
+            fstat=_fstat
+            lseek=_lseek
+            open=_open
+            read=_read
+            strdup=_strdup
+            unlink=_unlink
+            write=_write
+        )
     endif()
 else()
     list(APPEND UADE_COMPILE_DEFS
