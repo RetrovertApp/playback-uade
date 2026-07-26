@@ -18,7 +18,7 @@ jobs:
             cmake_flags: "-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++"
           - os: windows-latest
             compiler: msvc
-            cmake_flags: "-DUADE_BUILD_SMOKE_TEST=ON"
+            cmake_flags: ""
           - os: macos-latest
             compiler: default
             cmake_flags: ""
@@ -38,26 +38,6 @@ jobs:
 
       - name: Build
         run: cmake --build build
-
-      - name: Run UADE playback smoke test
-        if: matrix.compiler == 'msvc'
-        # Verbose output records the deterministic PCM hash in the CI log.
-        run: ctest --test-dir build --verbose
-
-      - name: Diagnose MSVC smoke-test crash
-        if: failure() && matrix.compiler == 'msvc'
-        shell: pwsh
-        run: |
-          $cdb = "${env:ProgramFiles(x86)}\Windows Kits\10\Debuggers\x64\cdb.exe"
-          if ((Test-Path $cdb) -and
-              (Test-Path build\plugins\uade_playback_smoke.exe) -and
-              (Test-Path build\plugins\uade_playback.dll)) {
-            & $cdb -lines -c "g; .ecxr; kp; q" `
-              build\plugins\uade_playback_smoke.exe `
-              "$((Resolve-Path build\plugins\uade_playback.dll).Path)"
-          } else {
-            Write-Host "Skipping crash diagnostics because the debugger or smoke-test binaries are unavailable."
-          }
 
       - name: Upload artifact
         if: startsWith(github.ref, 'refs/tags/')

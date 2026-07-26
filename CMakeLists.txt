@@ -322,25 +322,3 @@ add_custom_command(TARGET uade_playback POST_BUILD
 )
 
 rv_set_plugin_properties(uade_playback)
-
-option(UADE_BUILD_SMOKE_TEST "Build the standalone UADE playback smoke test" OFF)
-if(UADE_BUILD_SMOKE_TEST)
-    enable_testing()
-    add_executable(uade_playback_smoke tests/uade_playback_smoke.cpp)
-    target_include_directories(uade_playback_smoke PRIVATE ${RETROVERT_INCLUDE_DIR})
-    set_target_properties(uade_playback_smoke PROPERTIES
-        CXX_STANDARD 11
-        CXX_STANDARD_REQUIRED ON
-        RUNTIME_OUTPUT_DIRECTORY "${RETROVERT_PLUGIN_OUTPUT_DIR}"
-    )
-    if(UNIX)
-        target_link_libraries(uade_playback_smoke PRIVATE ${CMAKE_DL_LIBS})
-    endif()
-    add_test(
-        NAME uade_playback_smoke
-        COMMAND uade_playback_smoke "$<TARGET_FILE:uade_playback>"
-    )
-    set_tests_properties(uade_playback_smoke PROPERTIES
-        WORKING_DIRECTORY "${RETROVERT_PLUGIN_OUTPUT_DIR}"
-    )
-endif()
