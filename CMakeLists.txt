@@ -47,6 +47,12 @@ if(WIN32)
         SIZEOF_LONG=4
         SIZEOF___INT64=8
     )
+    if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
+        # The UCRT exposes the POSIX spelling as _strdup. Without this mapping,
+        # MSVC accepts strdup as an implicitly declared int-returning function
+        # and truncates the allocated pointer on 64-bit builds.
+        list(APPEND UADE_COMPILE_DEFS strdup=_strdup)
+    endif()
 else()
     list(APPEND UADE_COMPILE_DEFS
         HAVE_STRINGS_H=1
@@ -81,6 +87,14 @@ function(uade_enable_msvc_c target_name)
         # its inherited UAE compatibility headers, but MSVC only defines it
         # when explicitly requested.
         target_compile_options(${target_name} PRIVATE /std:c11 /Zc:__STDC__)
+    endif()
+endfunction()
+
+function(uade_reject_implicit_msvc_functions target_name)
+    if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
+        # Keep third-party warnings quiet, but never permit an undeclared
+        # function: its assumed int return type can corrupt 64-bit pointers.
+        target_compile_options(${target_name} PRIVATE /we4013)
     endif()
 endfunction()
 
@@ -133,6 +147,7 @@ target_include_directories(libuade PUBLIC
 target_compile_definitions(libuade PRIVATE ${UADE_COMPILE_DEFS})
 uade_enable_msvc_c(libuade)
 suppress_external_warnings(libuade)
+uade_reject_implicit_msvc_functions(libuade)
 # Clang 16+ makes implicit-function-declaration a hard error that -w doesn't suppress
 if(NOT MSVC)
     target_compile_options(libuade PRIVATE -Wno-error=implicit-function-declaration)
@@ -158,6 +173,7 @@ foreach(PART ${CPUEMU_PARTS})
         ${UADE_GENERATED_DIR}
     )
     suppress_external_warnings(cpuemu${PART})
+    uade_reject_implicit_msvc_functions(cpuemu${PART})
     if(NOT MSVC)
         target_compile_options(cpuemu${PART} PRIVATE -Wno-error=implicit-function-declaration)
     endif()
@@ -218,6 +234,7 @@ target_compile_definitions(uadecore PRIVATE
 )
 uade_enable_msvc_c(uadecore)
 suppress_external_warnings(uadecore)
+uade_reject_implicit_msvc_functions(uadecore)
 if(NOT MSVC)
     target_compile_options(uadecore PRIVATE -Wno-error=implicit-function-declaration)
 endif()
