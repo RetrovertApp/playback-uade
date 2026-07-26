@@ -43,6 +43,12 @@
 #define strcasecmp _stricmp
 #define strncasecmp _strnicmp
 
+/* MSVC names both the function and structure _stat. Mapping the POSIX name
+ * keeps UADE sources using `struct stat` portable without affecting MinGW. */
+#ifdef _MSC_VER
+#define stat _stat
+#endif
+
 /* Indicates that d_type field is available in dirent structure */
 #define _DIRENT_HAVE_D_TYPE
 
