@@ -21,7 +21,12 @@
 #else
 #include "uade/dirent_win32.h"
 #include <io.h>
-#define _open open
+#ifdef _MSC_VER
+#define open _open
+#define O_RDWR _O_RDWR
+#define O_CREAT _O_CREAT
+#define O_RDONLY _O_RDONLY
+#endif
 #define strcasecmp _stricmp
 #define strncasecmp _strnicmp
 #endif

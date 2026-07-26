@@ -29,6 +29,7 @@ unsigned int audio_scope_get_data(int channel, float* buffer, unsigned int num_s
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#define strcasecmp _stricmp
 #else
 #include <dlfcn.h>
 #endif
