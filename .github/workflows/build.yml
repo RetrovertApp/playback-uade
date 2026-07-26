@@ -7,6 +7,7 @@ env:
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
@@ -41,6 +42,19 @@ jobs:
       - name: Run UADE playback smoke test
         if: matrix.compiler == 'msvc'
         run: ctest --test-dir build --output-on-failure
+
+      - name: Diagnose MSVC smoke-test crash
+        if: failure() && matrix.compiler == 'msvc'
+        shell: pwsh
+        run: |
+          $cdb = "${env:ProgramFiles(x86)}\Windows Kits\10\Debuggers\x64\cdb.exe"
+          if (Test-Path $cdb) {
+            & $cdb -lines -c "g; .ecxr; kp; q" `
+              build\plugins\uade_playback_smoke.exe `
+              "$((Resolve-Path build\plugins\uade_playback.dll).Path)"
+          } else {
+            Write-Error "cdb.exe not found at $cdb"
+          }
 
       - name: Upload artifact
         if: startsWith(github.ref, 'refs/tags/')
