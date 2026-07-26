@@ -41,19 +41,22 @@ jobs:
 
       - name: Run UADE playback smoke test
         if: matrix.compiler == 'msvc'
-        run: ctest --test-dir build --output-on-failure
+        # Verbose output records the deterministic PCM hash in the CI log.
+        run: ctest --test-dir build --verbose
 
       - name: Diagnose MSVC smoke-test crash
         if: failure() && matrix.compiler == 'msvc'
         shell: pwsh
         run: |
           $cdb = "${env:ProgramFiles(x86)}\Windows Kits\10\Debuggers\x64\cdb.exe"
-          if (Test-Path $cdb) {
+          if ((Test-Path $cdb) -and
+              (Test-Path build\plugins\uade_playback_smoke.exe) -and
+              (Test-Path build\plugins\uade_playback.dll)) {
             & $cdb -lines -c "g; .ecxr; kp; q" `
               build\plugins\uade_playback_smoke.exe `
               "$((Resolve-Path build\plugins\uade_playback.dll).Path)"
           } else {
-            Write-Error "cdb.exe not found at $cdb"
+            Write-Host "Skipping crash diagnostics because the debugger or smoke-test binaries are unavailable."
           }
 
       - name: Upload artifact
