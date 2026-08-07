@@ -44,6 +44,27 @@ RV_PLUGIN_USE_METADATA_API();
 // Base directory for UADE data files (players, eagleplayer.conf)
 static char g_uade_base_dir[4096] = { 0 };
 
+static bool set_uade_base_dir(const char* library_path) {
+    char path[sizeof(g_uade_base_dir)];
+    if (snprintf(path, sizeof(path), "%s", library_path) >= (int)sizeof(path))
+        return false;
+
+    char* separator = strrchr(path, '/');
+#ifdef _WIN32
+    char* backslash = strrchr(path, '\\');
+    if (!separator || (backslash && backslash > separator))
+        separator = backslash;
+    const char* suffix = "\\uade_data";
+#else
+    const char* suffix = "/uade_data";
+#endif
+    if (!separator)
+        return false;
+    *separator = '\0';
+    int length = snprintf(g_uade_base_dir, sizeof(g_uade_base_dir), "%s%s", path, suffix);
+    return length > 0 && length < (int)sizeof(g_uade_base_dir);
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Thread wrapper for UADE's threading model
 
@@ -84,6 +105,10 @@ typedef struct UadeReplayerData {
 // Helper to create UADE state with common configuration
 
 static struct uade_state* create_uade_state(int spawn, ThreadWrapper* thread_wrapper) {
+    if (g_uade_base_dir[0] == '\0') {
+        rv_error("UADE: Runtime data directory is unavailable");
+        return nullptr;
+    }
     struct uade_config* config = uade_new_config();
     if (!config) {
         rv_error("UADE: Failed to create config");
@@ -453,35 +478,32 @@ static void uade_plugin_static_init(const RVService* service_api) {
     rv_init_log_api(service_api);
     rv_init_metadata_api(service_api);
 
-    // Locate the data installed alongside the plugin.
+    g_uade_base_dir[0] = '\0';
+    bool located = false;
 #ifdef _WIN32
     HMODULE module = nullptr;
     if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                            reinterpret_cast<LPCSTR>(&uade_plugin_static_init), &module)) {
-        DWORD length = GetModuleFileNameA(module, g_uade_base_dir, sizeof(g_uade_base_dir));
-        if (length > 0 && length < sizeof(g_uade_base_dir)) {
-            char* separator = strrchr(g_uade_base_dir, '\\');
-            if (!separator)
-                separator = strrchr(g_uade_base_dir, '/');
-            if (separator)
-                snprintf(separator, sizeof(g_uade_base_dir) - (separator - g_uade_base_dir), "\\uade_data");
-        }
+        char module_path[sizeof(g_uade_base_dir)];
+        DWORD length = GetModuleFileNameA(module, module_path, sizeof(module_path));
+        if (length > 0 && length < sizeof(module_path))
+            located = set_uade_base_dir(module_path);
     }
 #else
     Dl_info module_info = {};
     if (dladdr(reinterpret_cast<void*>(&uade_plugin_static_init), &module_info) &&
         module_info.dli_fname) {
-        strncpy(g_uade_base_dir, module_info.dli_fname, sizeof(g_uade_base_dir) - 1);
-        char* separator = strrchr(g_uade_base_dir, '/');
-        if (separator)
-            snprintf(separator, sizeof(g_uade_base_dir) - (separator - g_uade_base_dir), "/uade_data");
+        char module_path[sizeof(g_uade_base_dir)];
+        if (realpath(module_info.dli_fname, module_path))
+            located = set_uade_base_dir(module_path);
     }
 #endif
 
-    if (g_uade_base_dir[0] == '\0')
-        strncpy(g_uade_base_dir, "uade_data", sizeof(g_uade_base_dir) - 1);
-
-    rv_info("UADE: Initialized with base directory: %s", g_uade_base_dir);
+    if (located) {
+        rv_info("UADE: Initialized with base directory: %s", g_uade_base_dir);
+    } else {
+        rv_error("UADE: Cannot locate runtime data beside the loaded library");
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
