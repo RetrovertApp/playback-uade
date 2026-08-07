@@ -12,6 +12,8 @@
 cmake_minimum_required(VERSION 3.16)
 project(playback_uade C CXX)
 
+include(CTest)
+
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
@@ -303,8 +305,11 @@ set_target_properties(uade_playback PROPERTIES
 
 set(UADE_DATA_DIR "${RETROVERT_PLUGIN_OUTPUT_DIR}/uade_data")
 
-# Install UADE data files
-add_custom_command(TARGET uade_playback POST_BUILD
+file(GLOB_RECURSE UADE_PLAYER_FILES CONFIGURE_DEPENDS "${UADE_ROOT}/players/*")
+set(UADE_DATA_STAMP "${UADE_DATA_DIR}/.complete")
+add_custom_command(
+    OUTPUT "${UADE_DATA_STAMP}"
+    COMMAND ${CMAKE_COMMAND} -E remove_directory "${UADE_DATA_DIR}"
     COMMAND ${CMAKE_COMMAND} -E make_directory "${UADE_DATA_DIR}"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${UADE_ROOT}/eagleplayer.conf"
@@ -318,7 +323,28 @@ add_custom_command(TARGET uade_playback POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${UADE_ROOT}/players"
         "${UADE_DATA_DIR}/players"
-    COMMENT "Installing UADE data files to ${UADE_DATA_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E touch "${UADE_DATA_STAMP}"
+    DEPENDS
+        "${UADE_ROOT}/eagleplayer.conf"
+        "${CMAKE_CURRENT_SOURCE_DIR}/uaerc"
+        "${CMAKE_CURRENT_SOURCE_DIR}/score"
+        ${UADE_PLAYER_FILES}
+    COMMENT "Publishing UADE data to ${UADE_DATA_DIR}"
 )
+add_custom_target(uade_runtime_data DEPENDS "${UADE_DATA_STAMP}")
+add_dependencies(uade_playback uade_runtime_data)
 
 rv_set_plugin_properties(uade_playback)
+
+set(UADE_SMOKE_MODULE "" CACHE FILEPATH "Module used by the payload decode smoke test")
+if(BUILD_TESTING AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    add_executable(uade_payload_smoke tests/payload_smoke.cpp)
+    target_include_directories(uade_payload_smoke PRIVATE "${RETROVERT_INCLUDE_DIR}")
+    target_link_libraries(uade_payload_smoke PRIVATE ${CMAKE_DL_LIBS})
+    if(UADE_SMOKE_MODULE)
+        add_test(
+            NAME uade_payload_smoke
+            COMMAND uade_payload_smoke $<TARGET_FILE:uade_playback> "${UADE_SMOKE_MODULE}"
+        )
+    endif()
+endif()
