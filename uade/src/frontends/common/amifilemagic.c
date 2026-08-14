@@ -587,16 +587,15 @@ static int has_as_or_nt_file(const char *path) {
     char *exts[] = {".nt", ".NT", ".as", ".AS"};
     size_t pathlen = strlen(path);
     char *namebuf = malloc(pathlen + 4);
-    FILE *fh;
     int i, file_found = 0;
+
+    extern int uade_rv_io_exists(const char *url);
 
     if (namebuf) {
         strcpy(namebuf, path);
         for (i = 0; i < sizeof(exts)/sizeof(*exts); i++) {
             strcpy(&namebuf[pathlen], exts[i]);
-            fh = fopen(namebuf, "rb");
-            if (fh) {
-                fclose(fh);
+            if (uade_rv_io_exists(namebuf)) {
                 file_found = 1;
                 break;
             }

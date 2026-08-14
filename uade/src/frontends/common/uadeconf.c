@@ -333,8 +333,10 @@ int uade_load_config(struct uade_state *state, const char *filename)
 int uade_load_initial_config(struct uade_state *state, const char *bdir)
 {
 	int loaded = 0;
-	char *home;
 	char tmpname[PATH_MAX];
+#ifndef UADE_RETROVERT_PLUGIN
+	char *home;
+#endif
 
 	state->permconfigname[0] = 0;
 	uade_config_set_defaults(&state->permconfig);
@@ -345,12 +347,15 @@ int uade_load_initial_config(struct uade_state *state, const char *bdir)
 		loaded = uade_load_config(state, tmpname);
 	}
 
+	/* Embedded plugins must not read configuration outside their payload. */
+#ifndef UADE_RETROVERT_PLUGIN
 	/* Second, try to load config from ~/.uade/uade.conf */
 	home = uade_open_create_home();
 	if (loaded == 0 && home != NULL) {
 		snprintf(tmpname, sizeof(tmpname), "%s/.uade/uade.conf", home);
 		loaded = uade_load_config(state, tmpname);
 	}
+#endif
 
 	/* Third, try to load from install path */
 	if (loaded == 0) {
@@ -366,9 +371,11 @@ int uade_load_initial_config(struct uade_state *state, const char *bdir)
 int uade_load_initial_song_conf(struct uade_state *state)
 {
 	int loaded = 0;
-	char *home;
 	char tmpname[PATH_MAX + 16];
 	struct uade_config *uc = &state->config;
+#ifndef UADE_RETROVERT_PLUGIN
+	char *home;
+#endif
 
 	/* Used for testing */
 	if (uc != NULL && uc->basedir_set) {
@@ -381,6 +388,8 @@ int uade_load_initial_song_conf(struct uade_state *state)
 	if (loaded)
 		return loaded;
 
+	/* Embedded plugins must not read configuration outside their payload. */
+#ifndef UADE_RETROVERT_PLUGIN
 	home = uade_open_create_home();
 
 	/* Try to load from home dir */
@@ -388,6 +397,7 @@ int uade_load_initial_song_conf(struct uade_state *state)
 		snprintf(tmpname, sizeof(tmpname), "%s/.uade/song.conf", home);
 		loaded = uade_read_song_conf(tmpname, state);
 	}
+#endif
 
 	/* No? Try install path.. */
 	if (loaded == 0) {

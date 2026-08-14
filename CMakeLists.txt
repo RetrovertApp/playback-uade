@@ -157,6 +157,7 @@ target_include_directories(libuade PUBLIC
     ${BENCODE_ROOT}/include
 )
 target_compile_definitions(libuade PRIVATE ${UADE_COMPILE_DEFS})
+target_compile_definitions(libuade PRIVATE UADE_RETROVERT_PLUGIN=1)
 uade_enable_msvc_c(libuade)
 suppress_external_warnings(libuade)
 uade_reject_implicit_msvc_functions(libuade)

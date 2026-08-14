@@ -39,6 +39,7 @@ unsigned int audio_scope_get_data(int channel, float* buffer, unsigned int num_s
 #define OUTPUT_SAMPLE_RATE 48000
 
 RV_PLUGIN_USE_LOG_API();
+RV_PLUGIN_USE_IO_API();
 RV_PLUGIN_USE_METADATA_API();
 
 // Base directory for UADE data files (players, eagleplayer.conf)
@@ -93,6 +94,9 @@ static struct uade_state* create_uade_state(int spawn, ThreadWrapper* thread_wra
     uade_config_set_option(config, UC_ONE_SUBSONG, nullptr);
     uade_config_set_option(config, UC_IGNORE_PLAYER_CHECK, nullptr);
     uade_config_set_option(config, UC_NO_EP_END, nullptr);
+    // The plugin host owns persistence. Avoid UADE creating or updating a
+    // content database in the user's home directory.
+    uade_config_set_option(config, UC_NO_CONTENT_DB, nullptr);
     uade_config_set_option(config, UC_FREQUENCY, "48000");
     uade_config_set_option(config, UC_BASE_DIR, g_uade_base_dir);
 
@@ -100,6 +104,34 @@ static struct uade_state* create_uade_state(int spawn, ThreadWrapper* thread_wra
     free(config);
 
     return state;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// UADE copies the supplied buffer before returning, so the RVIo allocation can
+// be released immediately after this call.
+static int uade_play_url(const char* url, int subsong, struct uade_state* state) {
+    RVIoReadUrlResult file = rv_io_read_url_to_memory(url);
+    if (file.data == nullptr) {
+        rv_error("UADE: Failed to load %s", url);
+        return -1;
+    }
+
+    if (file.data_size == 0 || file.data_size > static_cast<uint64_t>(SIZE_MAX)) {
+        rv_error("UADE: Invalid file size for %s", url);
+        rv_io_free_url_to_memory(file.data);
+        return -1;
+    }
+
+    int result = uade_play_from_buffer(url, file.data, static_cast<size_t>(file.data_size), subsong, state);
+    rv_io_free_url_to_memory(file.data);
+    return result;
+}
+
+// Used by UADE's format detector for the small set of formats whose identity
+// depends on a companion file next to the module.
+extern "C" int uade_rv_io_exists(const char* url) {
+    return g_rv_io != nullptr && rv_io_exists(url);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -175,7 +207,7 @@ static int uade_plugin_open(void* user_data, const char* url, uint32_t subsong, 
 
     // Start playback
     int play_subsong = (subsong == 0) ? -1 : (int)subsong;
-    if (uade_play(url, play_subsong, data->state) != 1) {
+    if (uade_play_url(url, play_subsong, data->state) != 1) {
         rv_error("UADE: Failed to play %s", url);
         uade_cleanup_state(data->state, 1, &data->thread_wrapper);
         data->state = nullptr;
@@ -374,7 +406,7 @@ static int uade_plugin_metadata(const char* url, const RVService* service_api) {
     }
 
     // Start playback to get metadata
-    if (uade_play(url, -1, state) != 1) {
+    if (uade_play_url(url, -1, state) != 1) {
         uade_stop(state);
         uade_cleanup_state(state, 1, &thread_wrapper);
         return -1;
@@ -451,6 +483,7 @@ static void uade_plugin_event(void* user_data, uint8_t* event_data, uint64_t len
 
 static void uade_plugin_static_init(const RVService* service_api) {
     rv_init_log_api(service_api);
+    rv_init_io_api(service_api);
     rv_init_metadata_api(service_api);
 
     // Locate the data installed alongside the plugin.
