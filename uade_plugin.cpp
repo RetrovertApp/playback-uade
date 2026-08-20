@@ -347,8 +347,13 @@ static RVReadInfo uade_plugin_read_data(void* user_data, RVReadData dest) {
         return RVReadInfo { format, 0, RVReadStatus_Error };
     }
 
-    // Calculate how many S16 stereo frames fit in the output buffer
+    // Frames are capped by both the buffer capacity in the plugin's own S16
+    // output format and the caller's requested maximum: the buffer may be
+    // sized for a wider format hint, so capacity alone can exceed the request.
     uint32_t max_frames = dest.channels_output_max_bytes_size / (sizeof(int16_t) * 2);
+    if (dest.info.frame_count != 0 && dest.info.frame_count < max_frames) {
+        max_frames = dest.info.frame_count;
+    }
 
     // UADE produces stereo S16 samples directly to output buffer (4 bytes per frame)
     ssize_t bytes_read = uade_read(static_cast<int16_t*>(dest.channels_output), max_frames * 4, data->state);
