@@ -285,7 +285,9 @@ target_link_libraries(uade_playback PRIVATE
 find_package(Threads REQUIRED)
 target_link_libraries(uade_playback PRIVATE Threads::Threads)
 if(UNIX)
-    target_link_libraries(uade_playback PRIVATE m)
+    # CMAKE_DL_LIBS: dladdr lives in libdl until glibc 2.34, and the release
+    # floor is glibc 2.28.
+    target_link_libraries(uade_playback PRIVATE m ${CMAKE_DL_LIBS})
 endif()
 
 # Link winsock on Windows
