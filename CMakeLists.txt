@@ -301,24 +301,18 @@ set_target_properties(uade_playback PROPERTIES
 # =============================================================================
 # Step 6: Install UADE data files (players, eagleplayer.conf)
 # =============================================================================
+#
+# uade_data/ at the repo root is the canonical shipped data set (score, uaerc,
+# eagleplayer.conf, players/); the release harness packages it verbatim as the
+# artifact's uade_data/ tree.
 
 set(UADE_DATA_DIR "${RETROVERT_PLUGIN_OUTPUT_DIR}/uade_data")
 
 # Install UADE data files
 add_custom_command(TARGET uade_playback POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${UADE_DATA_DIR}"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${UADE_ROOT}/eagleplayer.conf"
-        "${UADE_DATA_DIR}/"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${CMAKE_CURRENT_SOURCE_DIR}/uaerc"
-        "${UADE_DATA_DIR}/"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${CMAKE_CURRENT_SOURCE_DIR}/score"
-        "${UADE_DATA_DIR}/"
     COMMAND ${CMAKE_COMMAND} -E copy_directory
-        "${UADE_ROOT}/players"
-        "${UADE_DATA_DIR}/players"
+        "${CMAKE_CURRENT_SOURCE_DIR}/uade_data"
+        "${UADE_DATA_DIR}"
     COMMENT "Installing UADE data files to ${UADE_DATA_DIR}"
 )
 
