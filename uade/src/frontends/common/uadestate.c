@@ -11,7 +11,6 @@
 #include <uade/uadeutils.h>
 #include <uade/unixatomic.h>
 #ifdef _WIN32
-#include <winsock2.h>
 #include <uade/dirent_win32.h>
 #include <io.h>
 #define access _access
@@ -19,7 +18,6 @@
 #define R_OK 4
 #endif
 #else
-#include <arpa/inet.h>
 #include <sys/wait.h>
 #include <dirent.h>
 #include <unistd.h>
@@ -217,7 +215,7 @@ static int receive_message(struct uade_event* event, struct uade_state* state) {
 
             sm = (uint16_t*)um->data;
             for (u = 0; u < um->size; u += 2) {
-                *data = ntohs(*sm);
+                *data = uade_be16(*sm);
                 sm++;
                 data++;
             }
@@ -931,7 +929,9 @@ int uade_get_event(struct uade_event* event, struct uade_state* state) {
 }
 
 int uade_get_fd(const struct uade_state* state) {
-    return state->ipc.in_fd;
+    (void)state;
+    /* The core runs in-process over uadechannel.c; there is no pollable fd. */
+    return -1;
 }
 
 void uade_cleanup_notification(struct uade_notification* n) {

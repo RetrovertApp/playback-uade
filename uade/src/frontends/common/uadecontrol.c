@@ -21,11 +21,8 @@
 #include <errno.h>
 #include <signal.h>
 #include <sys/types.h>
-#ifdef _WIN32
-#include <winsock2.h>
-#else
+#ifndef _WIN32
 #include <unistd.h>
-#include <sys/socket.h>
 #endif
 
 /* Sends a byte request and returns the number of bytes requested */

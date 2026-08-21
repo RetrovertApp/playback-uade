@@ -8,10 +8,10 @@
  */
 
 #include <uade/uade.h>
+#include <uade/uadechannel.h>
 #include <uade/uadeipc.h>
 #include <uade/ossupport.h>
 #include <uade/sysincludes.h>
-#include <uade/unixatomic.h>
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -24,7 +24,6 @@
 
 #ifdef _WIN32
 #include <uade/dirent_win32.h>
-#include <winsock2.h>
 #endif
 
 static int valid_message(struct uade_msg *uc);
@@ -70,8 +69,8 @@ static ssize_t get_more(size_t bytes, struct uade_ipc *ipc)
 		fprintf(stderr, "ipc: Internal error: bytes > inputbuffer\n");
 		return -1;
 	}
-	s = uade_atomic_read(ipc->in_fd, &ipc->inputbuffer[ipc->inputbytes],
-			     bytes - ipc->inputbytes);
+	s = uade_ipc_read(ipc->in_fd, &ipc->inputbuffer[ipc->inputbytes],
+			  bytes - ipc->inputbytes);
 	if (s <= 0)
 		return -1;
 	ipc->inputbytes += s;
@@ -142,7 +141,7 @@ struct uade_file *uade_receive_file(struct uade_ipc *ipc)
 		goto err;
 	}
 
-	filesize = htonl(meta->filesize);
+	filesize = uade_be32(meta->filesize);
 	/*
 	 * filesize == -1 indicates that the file does not exist, it is not an
 	 * error.
@@ -211,8 +210,8 @@ int uade_receive_message(struct uade_msg *um, size_t maxbytes,
 
 	copy_from_inputbuffer(um, sizeof(*um), ipc);
 
-	um->msgtype = ntohl(um->msgtype);
-	um->size = ntohl(um->size);
+	um->msgtype = uade_be32(um->msgtype);
+	um->size = uade_be32(um->size);
 
 	if (!valid_message(um))
 		return -1;
@@ -304,7 +303,7 @@ int uade_send_file(const struct uade_file *f, struct uade_ipc *ipc)
 	if (f != NULL) {
 		if (f->name != NULL)
 			strlcpy((char *) meta.filename, f->name, sizeof meta.filename);
-		meta.filesize = htonl(f->size);
+		meta.filesize = uade_be32(f->size);
 	}
 	if (uade_send_message((struct uade_msg *) &meta, ipc)) {
 		fprintf(stderr, "Can not send file meta\n");
@@ -350,10 +349,10 @@ int uade_send_message(struct uade_msg *um, struct uade_ipc *ipc)
 	}
 	if (um->msgtype == UADE_COMMAND_TOKEN)
 		ipc->state = UADE_R_STATE;
-	um->msgtype = htonl(um->msgtype);
-	um->size = htonl(um->size);
-	if (uade_atomic_write(ipc->out_fd, um, sizeof(*um) + size) < 0) {
-		fprintf(stderr, "uade_atomic_write() failed\n");
+	um->msgtype = uade_be32(um->msgtype);
+	um->size = uade_be32(um->size);
+	if (uade_ipc_write(ipc->out_fd, um, sizeof(*um) + size) < 0) {
+		fprintf(stderr, "uade_ipc_write() failed\n");
 		return -1;
 	}
 	um->msgtype = -1; /* POISON */
@@ -376,7 +375,7 @@ int uade_send_string(enum uade_msgtype com, const char *str,
 		     struct uade_ipc *ipc)
 {
 	uint32_t size = strlen(str) + 1;
-	struct uade_msg um = {.msgtype = ntohl(com), .size = ntohl(size)};
+	struct uade_msg um = {.msgtype = uade_be32(com), .size = uade_be32(size)};
 
 	if (ipc->state == UADE_INITIAL_STATE) {
 		ipc->state = UADE_S_STATE;
@@ -386,9 +385,9 @@ int uade_send_string(enum uade_msgtype com, const char *str,
 
 	if ((sizeof(um) + size) > UADE_MAX_MESSAGE_SIZE)
 		return -1;
-	if (uade_atomic_write(ipc->out_fd, &um, sizeof(um)) < 0)
+	if (uade_ipc_write(ipc->out_fd, &um, sizeof(um)) < 0)
 		return -1;
-	if (uade_atomic_write(ipc->out_fd, str, size) < 0)
+	if (uade_ipc_write(ipc->out_fd, str, size) < 0)
 		return -1;
 	return 0;
 }

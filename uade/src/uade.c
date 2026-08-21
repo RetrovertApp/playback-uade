@@ -14,10 +14,8 @@
 #include <limits.h>
 #ifdef _WIN32
 #include <uade/dirent_win32.h>
-#include <winsock2.h>
 #else
 #include <dirent.h>
-#include <arpa/inet.h>
 #endif
 
 #include "sysconfig.h"
@@ -43,6 +41,7 @@
 
 #include <uade/uade.h>
 #include <uade/ossupport.h>
+#include <uade/uadechannel.h>
 #include <uade/sysincludes.h>
 #include <uade/uadeconstants.h>
 #include <uade/uadeutils.h>
@@ -136,12 +135,9 @@ static void close_ipc(void) {
 #if defined(__AMIGA__) || defined(__AROS__)
     Close(uadecore_ipc.in_fd);
     Close(uadecore_ipc.out_fd);
-#elif defined(_WIN32)
-    closesocket(uadecore_ipc.in_fd);
-    closesocket(uadecore_ipc.out_fd);
 #else
-    close(uadecore_ipc.in_fd);
-    close(uadecore_ipc.out_fd);
+    uade_ipc_close(uadecore_ipc.in_fd);
+    uade_ipc_close(uadecore_ipc.out_fd);
 #endif
 }
 
@@ -201,7 +197,7 @@ static uae_u32 amiga_get_u32(int addr)
 		return 0;
 	}
 	ptr = (uae_u32 *) get_real_address(addr);
-	return ntohl(*ptr);
+	return uade_be32(*ptr);
 }
 
 static int amiga_get_i32(int addr)
@@ -224,13 +220,13 @@ static int calc_reloc_size(uae_u32 *src, uae_u32 *end)
 	int i;
 	int nhunks;
 
-	if (ntohl(*src) != 0x000003f3)
+	if (uade_be32(*src) != 0x000003f3)
 		return 0;
 	src++;
 
 	if (src >= end)
 		return 0;
-	if (ntohl(*src))
+	if (uade_be32(*src))
 		return 0;
 	src++;
 
@@ -241,7 +237,7 @@ static int calc_reloc_size(uae_u32 *src, uae_u32 *end)
 	 * Take number of hunks, and apply the undocumented 16-bit mask
 	 * feature.
 	 */
-	nhunks = ntohl(*src) & 0xffff;
+	nhunks = uade_be32(*src) & 0xffff;
 	if (nhunks == 0)
 		return 0;
 
@@ -253,7 +249,7 @@ static int calc_reloc_size(uae_u32 *src, uae_u32 *end)
 	for (i = 0; i < nhunks; i++) {
 		if (src >= end)
 			return 0;
-		offset += 4 * (ntohl(*src) & 0x00FFFFFF);
+		offset += 4 * (uade_be32(*src) & 0x00FFFFFF);
 		src++;
 	}
 
@@ -441,9 +437,9 @@ void uadecore_get_amiga_message(void)
 		um->msgtype = UADE_REPLY_SUBSONG_INFO;
 		um->size = 12;
 		u32ptr = (uint32_t *) um->data;
-		u32ptr[0] = htonl(mins);
-		u32ptr[1] = htonl(maxs);
-		u32ptr[2] = htonl(curs);
+		u32ptr[0] = uade_be32(mins);
+		u32ptr[1] = uade_be32(maxs);
+		u32ptr[2] = uade_be32(curs);
 		if (uade_send_message(um, &uadecore_ipc)) {
 			fprintf(stderr, "uadecore: Could not send subsong info message.\n");
 			exit_error();
@@ -851,8 +847,7 @@ void uadecore_option(int argc, char **argv)
   int out_fd = -1;
   char *endptr;
 
-  /* network byte order is the big endian order */
-  big_endian = (htonl(0x1234) == 0x1234);
+  big_endian = UADE_HOST_BIG_ENDIAN;
 
   memset(&song, 0, sizeof(song));
 
@@ -1305,7 +1300,7 @@ static void uade_put_long(int addr, int val)
 		return;
 	}
 	p = (uae_u32 *) get_real_address(addr);
-	*p = htonl(val);
+	*p = uade_be32(val);
 }
 
 static int uade_safe_load(int dst, FILE *file, int maxlen)

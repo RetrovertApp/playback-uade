@@ -6,14 +6,14 @@
 #include <assert.h>
 #include <stdio.h>
 
+/* These operate on real file descriptors only; the uade IPC path uses
+   uade_ipc_read()/uade_ipc_write() in uadechannel.c. */
 #ifdef _WIN32
-#include <winsock2.h>
-#define UREAD(fd, target, len) recv(fd, target, len, 0)
-#define UWRITE(fd, target, len) send(fd, target, len, 0)
-#define UCLOSE(fd) closesocket(fd)
+#include <io.h>
+#define UREAD(fd, target, len) _read(fd, target, (unsigned int)(len))
+#define UWRITE(fd, target, len) _write(fd, target, (unsigned int)(len))
+#define UCLOSE(fd) _close(fd)
 #else
-#include <sys/select.h>
-#include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
 #define UREAD(fd, target, len) read(fd, target, len)
@@ -65,14 +65,6 @@ ssize_t uade_atomic_read(int fd, const void *buf, size_t count)
     if (ret < 0) {
       if (errno == EINTR)
         continue;
-      if (errno == EAGAIN) {
-	fd_set s;
-	FD_ZERO(&s);
-	FD_SET(fd, &s);
-	if (select(fd + 1, &s, NULL, NULL, NULL) == 0)
-	  fprintf(stderr, "atomic_read: very strange. infinite select() returned 0. report this!\n");
-	continue;
-      }
       return -1;
     } else if (ret == 0) {
       return 0;
@@ -92,14 +84,6 @@ ssize_t uade_atomic_write(int fd, const void *buf, size_t count)
     if (ret < 0) {
       if (errno == EINTR)
         continue;
-      if (errno == EAGAIN) {
-	fd_set s;
-	FD_ZERO(&s);
-	FD_SET(fd, &s);
-	if (select(fd + 1, NULL, &s, NULL, NULL) == 0)
-	  fprintf(stderr, "atomic_write: very strange. infinite select() returned 0. report this!\n");
-	continue;
-      }
       return -1;
     }
     bytes_written += ret;

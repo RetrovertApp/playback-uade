@@ -118,6 +118,7 @@ uade_enable_msvc_c(bencode)
 
 set(LIBUADE_SOURCES
     ${UADE_COMMON}/unixatomic.c
+    ${UADE_COMMON}/uadechannel.c
     ${UADE_COMMON}/uadeipc.c
     ${UADE_COMMON}/amifilemagic.c
     ${UADE_COMMON}/eagleplayer.c
@@ -142,10 +143,7 @@ if(NOT APPLE)
     list(APPEND LIBUADE_SOURCES ${UADE_COMPAT}/strlrep.c)
 endif()
 
-# Windows-specific compat files
-if(WIN32)
-    list(APPEND LIBUADE_SOURCES ${UADE_COMPAT}/mingw-socketpair.c)
-endif()
+find_package(Threads REQUIRED)
 
 add_library(libuade STATIC ${LIBUADE_SOURCES})
 target_include_directories(libuade PUBLIC
@@ -167,6 +165,8 @@ if(NOT MSVC)
 endif()
 set_target_properties(libuade PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_link_libraries(libuade PRIVATE bencode)
+# uadechannel.c uses pthreads / Win32 condition variables.
+target_link_libraries(libuade PUBLIC Threads::Threads)
 
 # =============================================================================
 # Step 4: Build uadecore (68000 emulator + Amiga hardware)
@@ -282,17 +282,11 @@ target_link_libraries(uade_playback PRIVATE
 )
 
 # std::thread uses the platform's native threading implementation.
-find_package(Threads REQUIRED)
 target_link_libraries(uade_playback PRIVATE Threads::Threads)
 if(UNIX)
     # CMAKE_DL_LIBS: dladdr lives in libdl until glibc 2.34, and the release
     # floor is glibc 2.28.
     target_link_libraries(uade_playback PRIVATE m ${CMAKE_DL_LIBS})
-endif()
-
-# Link winsock on Windows
-if(WIN32)
-    target_link_libraries(uade_playback PRIVATE ws2_32)
 endif()
 
 set_target_properties(uade_playback PROPERTIES
@@ -319,3 +313,26 @@ add_custom_command(TARGET uade_playback POST_BUILD
 )
 
 rv_set_plugin_properties(uade_playback)
+
+# =============================================================================
+# Step 7: Channel unit tests
+# =============================================================================
+#
+# uadechannel.c is compiled into the test directly so the no-progress timeout
+# can be shortened; linking libuade would use the shipped 30s value.
+
+enable_testing()
+
+add_executable(uadechannel_tests
+    tests/uadechannel_tests.cpp
+    ${UADE_COMMON}/uadechannel.c
+)
+target_include_directories(uadechannel_tests PRIVATE ${UADE_INCLUDE})
+target_compile_definitions(uadechannel_tests PRIVATE UADE_CHANNEL_TIMEOUT_MS=300)
+target_link_libraries(uadechannel_tests PRIVATE Threads::Threads)
+set_target_properties(uadechannel_tests PROPERTIES
+    CXX_STANDARD 11
+    CXX_STANDARD_REQUIRED ON
+)
+
+add_test(NAME uadechannel COMMAND uadechannel_tests)

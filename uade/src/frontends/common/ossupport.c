@@ -7,8 +7,8 @@
    This module is licensed under the GNU LGPL.
 */
 
+#include <uade/uadechannel.h>
 #include <uade/uadeipc.h>
-#include <uade/unixatomic.h>
 
 #include <assert.h>
 #include <ctype.h>
@@ -29,17 +29,6 @@
 #include <dirent.h>
 #include <libgen.h>
 #include <unistd.h>
-#include <sys/socket.h>
-#endif
-
-#ifdef _WIN32
-int dumb_socketpair(int socks[2], int make_overlapped);
-#else
-/* Unix implementation using standard socketpair */
-static int dumb_socketpair(int socks[2], int make_overlapped) {
-    (void)make_overlapped;
-    return socketpair(AF_UNIX, SOCK_STREAM, 0, socks);
-}
 #endif
 
 int uade_filesize(size_t* size, const char* pathname) {
@@ -232,8 +221,9 @@ void uade_run_thread(void (*f)(void*), void* data, void* user_data);
 void uade_wait_thread(void* user_data);
 
 void uade_arch_kill_and_wait_uadecore(struct uade_ipc* ipc, pid_t* uadepid, void* user_data) {
-    uade_atomic_close(ipc->in_fd);
-    uade_atomic_close(ipc->out_fd);
+    /* Closing our end is what unwedges the core: its next read returns EOF. */
+    uade_ipc_close(ipc->in_fd);
+    uade_ipc_close(ipc->out_fd);
 
     uade_wait_thread(user_data);
 }
@@ -247,29 +237,38 @@ _Thread_local
 jmp_buf uade_thread_exit_context;
 
 static void thread_func(void* data) {
-    int* fds = (int*)data;
+    int* core_id = (int*)data;
     char input[32], output[32];
 
-    /* give in/out fds as command line parameters to uadecore */
-    snprintf(input, sizeof input, "%d", fds[1]);
-    snprintf(output, sizeof output, "%d", fds[1]);
+    /* give the core's channel endpoint as command line parameters to uadecore */
+    snprintf(input, sizeof input, "%d", *core_id);
+    snprintf(output, sizeof output, "%d", *core_id);
+    free(core_id);
 
     char* args[] = { "uadecore", "-i", input, "-o", output };
     if (setjmp(uade_thread_exit_context) == 0)
         uadecore_main(5, args);
 }
 
-static int spawn_fds[2];
-
 int uade_arch_spawn(struct uade_ipc* ipc, pid_t* uadepid, const char* uadename, void* user_data) {
-    if (dumb_socketpair(spawn_fds, 0)) {
-        uade_warning("Can not create socketpair: %s\n", strerror(errno));
+    int ids[2];
+    int* core_id;
+
+    if (uade_ipc_channel_create(ids))
+        return -1;
+
+    /* The thread reads this after we return, so it cannot live on our stack. */
+    core_id = malloc(sizeof *core_id);
+    if (core_id == NULL) {
+        uade_ipc_close(ids[0]);
+        uade_ipc_close(ids[1]);
         return -1;
     }
+    *core_id = ids[1];
 
-    uade_run_thread(&thread_func, (void*)spawn_fds, user_data);
+    uade_run_thread(&thread_func, core_id, user_data);
 
-    uade_set_peer(ipc, 1, spawn_fds[0], spawn_fds[0]);
+    uade_set_peer(ipc, 1, ids[0], ids[0]);
     return 0;
 }
 #include <limits.h>

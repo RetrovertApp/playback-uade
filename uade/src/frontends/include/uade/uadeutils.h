@@ -4,6 +4,36 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#if defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+#define UADE_HOST_BIG_ENDIAN 1
+#else
+#define UADE_HOST_BIG_ENDIAN 0
+#endif
+
+/*
+ * Host <-> big-endian conversion for the wire format. Self-inverse, so one
+ * function covers what hton/ntoh needed a pair for. Hand-rolled because the
+ * Winsock versions would drag ws2_32 back onto the link line.
+ */
+static inline uint32_t uade_be32(uint32_t x)
+{
+#if UADE_HOST_BIG_ENDIAN
+	return x;
+#else
+	return ((x & 0xffu) << 24) | ((x & 0xff00u) << 8) |
+	       ((x >> 8) & 0xff00u) | ((x >> 24) & 0xffu);
+#endif
+}
+
+static inline uint16_t uade_be16(uint16_t x)
+{
+#if UADE_HOST_BIG_ENDIAN
+	return x;
+#else
+	return (uint16_t) ((x << 8) | (x >> 8));
+#endif
+}
+
 static inline uint16_t read_be_u16(void *s)
 {
 	uint16_t x;

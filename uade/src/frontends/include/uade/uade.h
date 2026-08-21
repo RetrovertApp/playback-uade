@@ -237,7 +237,7 @@ const struct uade_config* uade_get_const_effective_config(const struct uade_stat
  */
 int uade_get_event(struct uade_event* event, struct uade_state* state);
 
-/* Returns fd to poll for new events */
+/* Always -1: the core runs in-process, so there is nothing to poll. */
 int uade_get_fd(const struct uade_state* state);
 
 /*
