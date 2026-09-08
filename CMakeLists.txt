@@ -12,6 +12,8 @@
 cmake_minimum_required(VERSION 3.16)
 project(playback_uade C CXX)
 
+include(CTest)
+
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
@@ -336,3 +338,23 @@ set_target_properties(uadechannel_tests PROPERTIES
 )
 
 add_test(NAME uadechannel COMMAND uadechannel_tests)
+
+# =============================================================================
+# Step 8: Payload decode smoke test
+# =============================================================================
+#
+# Loads the built plugin with HOME unset and decodes a module, so a data path
+# that only resolves through the user's home directory fails the test.
+
+set(UADE_SMOKE_MODULE "" CACHE FILEPATH "Module used by the payload decode smoke test")
+if(BUILD_TESTING AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    add_executable(uade_payload_smoke tests/payload_smoke.cpp)
+    target_include_directories(uade_payload_smoke PRIVATE "${RETROVERT_INCLUDE_DIR}")
+    target_link_libraries(uade_payload_smoke PRIVATE ${CMAKE_DL_LIBS})
+    if(UADE_SMOKE_MODULE)
+        add_test(
+            NAME uade_payload_smoke
+            COMMAND uade_payload_smoke $<TARGET_FILE:uade_playback> "${UADE_SMOKE_MODULE}"
+        )
+    endif()
+endif()
